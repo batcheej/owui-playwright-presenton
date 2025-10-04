@@ -9,7 +9,7 @@
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/YOUR_USERNAME/owui-playwright-presenton.git
+git clone https://github.com/batcheej/owui-playwright-presenton.git
 cd owui-playwright-presenton
 ```
 
