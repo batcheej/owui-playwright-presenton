@@ -1,0 +1,33 @@
+{
+  "name": "owui-playwright-presenton",
+  "version": "1.0.0",
+  "description": "Playwright automation to extract LLM responses from Open WebUI and create presentations in Presenton",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "test": "npx playwright test",
+    "install-browsers": "npx playwright install"
+  },
+  "keywords": [
+    "playwright",
+    "automation",
+    "openwebui",
+    "presenton",
+    "llm",
+    "presentation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "ts-node": "^10.9.0"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.40.0",
+    "playwright": "^1.40.0",
+    "dotenv": "^16.3.0"
+  }
+}
