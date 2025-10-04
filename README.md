@@ -39,23 +39,36 @@ A complete automation solution that extracts LLM responses from Open WebUI and a
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/batcheej/owui-playwright-presenton.git
 cd owui-playwright-presenton
 ```
 
-2. Install dependencies:
+2. Quick setup (installs everything and checks configuration):
+```bash
+npm run setup
+```
+
+**OR** manual setup:
+
+3. Install dependencies:
 ```bash
 npm install
 ```
 
-3. Install Playwright browsers:
+4. Install Playwright browsers:
 ```bash
 npx playwright install
 ```
 
-4. Create environment file (optional):
+5. Create and configure environment file:
 ```bash
 cp .env.example .env
+# Edit .env with your credentials
+```
+
+6. Verify configuration:
+```bash
+npm run check-env
 ```
 
 Edit `.env` with your configuration:
@@ -166,6 +179,16 @@ The automation is configured with:
 
 ### Common Issues
 
+**"No login credentials provided" error:**
+- Ensure `.env` file exists: `cp .env.example .env`
+- Edit `.env` file with your Open WebUI credentials:
+  ```
+  OPENWEBUI_EMAIL=your-email@domain.com
+  OPENWEBUI_PASSWORD=your-password
+  ```
+- Run `npm run check-env` to verify configuration
+- Ensure credentials match your Open WebUI account
+
 **Browser closes during automation:**
 - Ensure no other processes are interfering with the browser
 - Check that sufficient system resources are available
@@ -181,6 +204,23 @@ The automation is configured with:
 **Template selection fails:**
 - Ensure Presenton is running and accessible
 - Check network connectivity to localhost:5000
+
+**WSL-specific issues:**
+- See `WSL-SETUP.md` for comprehensive WSL troubleshooting
+- Use Windows host IP for services running on Windows
+- Install required dependencies: `npx playwright install-deps`
+
+### Debug Commands
+```bash
+# Check environment configuration
+npm run check-env
+
+# Run with detailed debugging
+DEBUG=true npm run dev "your prompt"
+
+# Test browser setup
+npx playwright test --debug
+```
 
 ### Debug Information
 The automation generates detailed logs and screenshots:

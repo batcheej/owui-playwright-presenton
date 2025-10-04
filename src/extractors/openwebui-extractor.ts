@@ -166,7 +166,7 @@ export class OpenWebUIExtractor {
     
     if (currentUrl.includes('/auth') || currentUrl.includes('/login') || currentUrl.includes('/signin')) {
       console.log('🔒 Login URL pattern detected');
-      const username = process.env.OPENWEBUI_USERNAME;
+      const username = process.env.OPENWEBUI_USERNAME || process.env.OPENWEBUI_EMAIL;
       const password = process.env.OPENWEBUI_PASSWORD;
       
       if (username && password) {
@@ -231,14 +231,38 @@ export class OpenWebUIExtractor {
     }
     
     if (loginRequired) {
-      const username = process.env.OPENWEBUI_USERNAME;
+      // Check for credentials - support both EMAIL and USERNAME variables
+      const username = process.env.OPENWEBUI_USERNAME || process.env.OPENWEBUI_EMAIL;
       const password = process.env.OPENWEBUI_PASSWORD;
+      
+      console.log('🔍 Checking environment variables...');
+      console.log(`Username/Email: ${username ? '✅ Found' : '❌ Missing'}`);
+      console.log(`Password: ${password ? '✅ Found' : '❌ Missing'}`);
       
       if (username && password) {
         console.log('🔑 Login required, attempting to log in...');
         await this.performLogin(username, password);
       } else {
-        console.log('⚠️ Login required but no credentials provided. Checking for signup option...');
+        console.log('⚠️ Login required but credentials missing!');
+        console.log('💡 Please ensure your .env file contains:');
+        console.log('   OPENWEBUI_EMAIL=your-email@domain.com');
+        console.log('   OPENWEBUI_PASSWORD=your-password');
+        console.log('');
+        console.log('📁 Current working directory:', process.cwd());
+        console.log('🔧 Copy .env.example to .env and update with your credentials');
+        
+        // Check if .env file exists
+        const fs = require('fs');
+        const path = require('path');
+        const envPath = path.join(process.cwd(), '.env');
+        const envExists = fs.existsSync(envPath);
+        console.log(`📄 .env file exists: ${envExists ? '✅ Yes' : '❌ No'}`);
+        
+        if (!envExists) {
+          console.log('🚨 .env file not found! Run: cp .env.example .env');
+        }
+        
+        console.log('⚠️ Checking for signup option...');
         await this.handleSignupIfNeeded();
       }
     } else {

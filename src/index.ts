@@ -7,6 +7,63 @@ import { PresentationData } from './types/presentation';
 // Load environment variables
 dotenv.config();
 
+// Validate environment variables
+function validateEnvironment(): void {
+  console.log('🔍 Validating environment configuration...');
+  
+  const requiredVars = [
+    { name: 'OPENWEBUI_URL', value: process.env.OPENWEBUI_URL, default: 'http://localhost:8080' },
+    { name: 'PRESENTON_URL', value: process.env.PRESENTON_URL, default: 'http://localhost:5000' }
+  ];
+  
+  const credentialVars = [
+    { name: 'OPENWEBUI_EMAIL/USERNAME', value: process.env.OPENWEBUI_EMAIL || process.env.OPENWEBUI_USERNAME },
+    { name: 'OPENWEBUI_PASSWORD', value: process.env.OPENWEBUI_PASSWORD }
+  ];
+  
+  console.log('📊 Configuration Status:');
+  console.log('========================');
+  
+  // Check required URLs
+  requiredVars.forEach(({ name, value, default: defaultValue }) => {
+    const finalValue = value || defaultValue;
+    console.log(`${name}: ${finalValue} ${!value ? '(using default)' : '✅'}`);
+  });
+  
+  // Check credentials
+  credentialVars.forEach(({ name, value }) => {
+    console.log(`${name}: ${value ? '✅ Configured' : '❌ Missing'}`);
+  });
+  
+  console.log('========================');
+  
+  // Check for .env file
+  const fs = require('fs');
+  const path = require('path');
+  const envPath = path.join(process.cwd(), '.env');
+  const envExists = fs.existsSync(envPath);
+  
+  console.log(`📄 .env file: ${envExists ? '✅ Found' : '❌ Not found'}`);
+  
+  if (!envExists) {
+    console.log('');
+    console.log('🚨 SETUP REQUIRED:');
+    console.log('   1. Copy .env.example to .env: cp .env.example .env');
+    console.log('   2. Edit .env with your credentials');
+    console.log('   3. Ensure Open WebUI and Presenton are running');
+    console.log('');
+  }
+  
+  const hasCredentials = (process.env.OPENWEBUI_EMAIL || process.env.OPENWEBUI_USERNAME) && process.env.OPENWEBUI_PASSWORD;
+  if (!hasCredentials) {
+    console.log('⚠️  No Open WebUI credentials found - automation may attempt signup or fail at login');
+    console.log('');
+  }
+}
+
+// Validate environment on module load
+validateEnvironment();
+
 export class LLMToPresentationAutomator {
   private browser: Browser | null = null;
 
