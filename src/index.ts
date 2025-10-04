@@ -11,10 +11,42 @@ export class LLMToPresentationAutomator {
   private browser: Browser | null = null;
 
   async initialize(): Promise<void> {
-    this.browser = await chromium.launch({
+    // Detect if running in WSL
+    const isWSL = process.platform === 'linux' && process.env.WSL_DISTRO_NAME;
+    
+    console.log(`🚀 Initializing browser ${isWSL ? '(WSL detected)' : '(Windows)'}`);
+    
+    const launchOptions: any = {
       headless: process.env.HEADLESS === 'true',
       slowMo: 100, // Add small delay for better visibility
-    });
+    };
+    
+    // Enhanced configuration for WSL
+    if (isWSL) {
+      console.log('🐧 Applying WSL-specific browser configuration...');
+      launchOptions.args = [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--disable-gpu',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-ipc-flooding-protection',
+        '--disable-features=TranslateUI',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor'
+      ];
+      
+      // Increase timeouts for WSL
+      launchOptions.timeout = 60000;
+    }
+    
+    this.browser = await chromium.launch(launchOptions);
+    console.log('✅ Browser initialized successfully');
   }
 
   async extractFromOpenWebUI(prompt: string): Promise<string> {

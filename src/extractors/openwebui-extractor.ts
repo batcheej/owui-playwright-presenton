@@ -129,95 +129,222 @@ export class OpenWebUIExtractor {
   }
 
   private async handleLoginIfRequired(): Promise<void> {
-    // Wait a moment for the page to fully load
-    await this.page.waitForTimeout(3000);
+    // Wait longer for the page to fully load in WSL environments
+    await this.page.waitForTimeout(5000);
     
-    // Check if we're on a login page by looking for both login indicators AND the absence of chat interface
+    // Enhanced login detection for WSL compatibility
     const loginIndicators = [
       'input[type="email"]',
       'input[type="password"]',
       'text=Sign in',
       'text=Login',
-      'button:has-text("Sign in")'
+      'button:has-text("Sign in")',
+      'form[action*="login"]',
+      '.login-form',
+      '#login-form'
     ];
     
     const chatIndicators = [
       'textarea[placeholder*="Send a message"]',
       'textarea[placeholder*="Ask"]',
       'input[type="text"][placeholder*="message"]',
+      'textarea[placeholder*="Type"]',
+      'textarea[placeholder*="Enter"]',
+      'textarea[placeholder*="message"]',
       '.chat-input',
-      '.message-input'
+      '.message-input',
+      'textarea.w-full',
+      'textarea[rows]',
+      'div[contenteditable="true"]'
     ];
     
-    // Check if chat interface is available (meaning we're already logged in)
+    console.log('🔍 Checking page state for login requirements...');
+    
+    // First, wait and check URL patterns that indicate login pages
+    const currentUrl = this.page.url();
+    console.log(`Current URL: ${currentUrl}`);
+    
+    if (currentUrl.includes('/auth') || currentUrl.includes('/login') || currentUrl.includes('/signin')) {
+      console.log('🔒 Login URL pattern detected');
+      const username = process.env.OPENWEBUI_USERNAME;
+      const password = process.env.OPENWEBUI_PASSWORD;
+      
+      if (username && password) {
+        console.log('🔑 Attempting login with provided credentials...');
+        await this.performLogin(username, password);
+        return;
+      } else {
+        console.log('⚠️ No credentials provided, checking for signup...');
+        await this.handleSignupIfNeeded();
+        return;
+      }
+    }
+    
+    // Check for chat interface availability with retries for WSL
     let chatAvailable = false;
-    for (const indicator of chatIndicators) {
-      if (await this.page.locator(indicator).count() > 0) {
-        chatAvailable = true;
-        break;
+    let attempts = 0;
+    const maxAttempts = 3;
+    
+    while (!chatAvailable && attempts < maxAttempts) {
+      attempts++;
+      console.log(`🔍 Attempt ${attempts}: Checking for chat interface...`);
+      
+      for (const indicator of chatIndicators) {
+        try {
+          const elements = await this.page.locator(indicator).count();
+          if (elements > 0) {
+            console.log(`✅ Chat interface found with selector: ${indicator}`);
+            chatAvailable = true;
+            break;
+          }
+        } catch (error) {
+          // Continue checking other selectors
+        }
+      }
+      
+      if (!chatAvailable && attempts < maxAttempts) {
+        console.log(`⏳ Chat interface not found, waiting before retry...`);
+        await this.page.waitForTimeout(3000);
       }
     }
     
     if (chatAvailable) {
-      console.log('Chat interface detected, proceeding without login');
+      console.log('✅ Chat interface detected, proceeding without login');
       return;
     }
     
-    // Only check for login if chat interface is not available
+    // Check for login elements with enhanced detection
+    console.log('🔍 Chat interface not found, checking for login elements...');
+    let loginRequired = false;
+    
     for (const indicator of loginIndicators) {
-      if (await this.page.locator(indicator).count() > 0) {
-        const username = process.env.OPENWEBUI_USERNAME;
-        const password = process.env.OPENWEBUI_PASSWORD;
-        
-        if (username && password) {
-          console.log('Login page detected, attempting to log in...');
-          await this.performLogin(username, password);
-        } else {
-          console.log('Login page detected but no credentials provided. Checking for signup option...');
-          await this.handleSignupIfNeeded();
-          // Don't throw error, try to continue
+      try {
+        const elements = await this.page.locator(indicator).count();
+        if (elements > 0) {
+          console.log(`🔒 Login element found: ${indicator}`);
+          loginRequired = true;
+          break;
         }
-        break;
+      } catch (error) {
+        // Continue checking other indicators
+      }
+    }
+    
+    if (loginRequired) {
+      const username = process.env.OPENWEBUI_USERNAME;
+      const password = process.env.OPENWEBUI_PASSWORD;
+      
+      if (username && password) {
+        console.log('🔑 Login required, attempting to log in...');
+        await this.performLogin(username, password);
+      } else {
+        console.log('⚠️ Login required but no credentials provided. Checking for signup option...');
+        await this.handleSignupIfNeeded();
+      }
+    } else {
+      console.log('❓ No clear login or chat indicators found, attempting to continue...');
+      // Take a screenshot for debugging in WSL
+      try {
+        await this.page.screenshot({ path: './debug-login-state.png', fullPage: true });
+        console.log('📸 Debug screenshot saved as debug-login-state.png');
+      } catch (error) {
+        console.log('Screenshot failed:', (error as Error).message);
       }
     }
   }
 
   private async performLogin(username: string, password: string): Promise<void> {
     try {
-      console.log('Attempting login with provided credentials...');
+      console.log('🔑 Attempting login with provided credentials...');
       
-      // Wait for login form to be fully loaded
+      // Wait longer for login form to be fully loaded in WSL
+      await this.page.waitForTimeout(3000);
+      
+      // Enhanced email/username field detection
+      const emailSelectors = [
+        'input[type="email"]',
+        'input[name="email"]',
+        'input[name="username"]',
+        'input[placeholder*="email" i]',
+        'input[placeholder*="Email" i]',
+        'input[placeholder*="username" i]',
+        'input[placeholder*="Username" i]',
+        '#email',
+        '#username',
+        '.email-input',
+        '.username-input'
+      ];
+      
+      let emailFilled = false;
+      for (const selector of emailSelectors) {
+        try {
+          const emailInput = this.page.locator(selector).first();
+          if (await emailInput.count() > 0 && await emailInput.isVisible()) {
+            console.log(`📧 Found email field with selector: ${selector}`);
+            await emailInput.click({ timeout: 5000 });
+            await emailInput.fill(''); // Clear first
+            await this.page.waitForTimeout(500);
+            await emailInput.fill(username);
+            console.log('✅ Email field filled successfully');
+            emailFilled = true;
+            break;
+          }
+        } catch (error) {
+          console.log(`Email selector ${selector} failed, trying next...`);
+        }
+      }
+      
+      if (!emailFilled) {
+        console.log('❌ No email field found');
+      }
+      
+      // Enhanced password field detection
+      const passwordSelectors = [
+        'input[type="password"]',
+        'input[name="password"]',
+        '#password',
+        '.password-input'
+      ];
+      
+      let passwordFilled = false;
+      for (const selector of passwordSelectors) {
+        try {
+          const passwordInput = this.page.locator(selector).first();
+          if (await passwordInput.count() > 0 && await passwordInput.isVisible()) {
+            console.log(`🔒 Found password field with selector: ${selector}`);
+            await passwordInput.click({ timeout: 5000 });
+            await passwordInput.fill(''); // Clear first
+            await this.page.waitForTimeout(500);
+            await passwordInput.fill(password);
+            console.log('✅ Password field filled successfully');
+            passwordFilled = true;
+            break;
+          }
+        } catch (error) {
+          console.log(`Password selector ${selector} failed, trying next...`);
+        }
+      }
+      
+      if (!passwordFilled) {
+        console.log('❌ No password field found');
+      }
+      
+      // Wait before attempting to submit
       await this.page.waitForTimeout(2000);
       
-      // Fill username/email
-      const emailInput = this.page.locator('input[type="email"], input[name="email"], input[name="username"], input[placeholder*="email"]').first();
-      if (await emailInput.count() > 0) {
-        await emailInput.click();
-        await emailInput.fill('');
-        await emailInput.fill(username);
-        console.log('Filled email field');
-      }
-      
-      // Fill password
-      const passwordInput = this.page.locator('input[type="password"]').first();
-      if (await passwordInput.count() > 0) {
-        await passwordInput.click();
-        await passwordInput.fill('');
-        await passwordInput.fill(password);
-        console.log('Filled password field');
-      }
-      
-      // Wait a moment before clicking login
-      await this.page.waitForTimeout(1000);
-      
-      // Click login button
+      // Enhanced login button detection and clicking
       const loginButtons = [
         'button[type="submit"]',
         'button:has-text("Sign in")',
         'button:has-text("Login")',
         'button:has-text("Sign In")',
+        'button:has-text("LOG IN")',
+        'input[type="submit"]',
         '.login-button',
-        '.signin-button'
+        '.signin-button',
+        '.btn-login',
+        '#login-button',
+        '#signin-button'
       ];
       
       let loginClicked = false;
@@ -225,27 +352,44 @@ export class OpenWebUIExtractor {
         try {
           const button = this.page.locator(selector);
           if (await button.count() > 0) {
-            console.log(`Clicking login button: ${selector}`);
-            await button.click();
-            loginClicked = true;
-            break;
+            console.log(`🖱️ Attempting to click login button: ${selector}`);
+            
+            // Wait for button to be enabled
+            await button.waitFor({ state: 'visible', timeout: 5000 });
+            
+            // Check if button is enabled
+            const isEnabled = await button.isEnabled();
+            if (isEnabled) {
+              await button.click({ timeout: 5000 });
+              console.log('✅ Login button clicked successfully');
+              loginClicked = true;
+              break;
+            } else {
+              console.log('⚠️ Button found but not enabled, trying next...');
+            }
           }
         } catch (error) {
-          console.log(`Login button ${selector} failed:`, error);
+          console.log(`Login button ${selector} failed:`, (error as Error).message);
         }
       }
       
       if (!loginClicked) {
-        console.log('No login button found, trying Enter key');
+        console.log('⌨️ No clickable login button found, trying Enter key');
         await this.page.keyboard.press('Enter');
       }
       
-      // Wait for login to complete with proper error handling
-      console.log('Waiting for login to complete...');
-      await this.page.waitForLoadState('networkidle', { timeout: 15000 });
+      // Enhanced waiting for login completion with multiple checks
+      console.log('⏳ Waiting for login to complete...');
       
-      // Check for successful login by looking for chat interface or dashboard
-      await this.page.waitForTimeout(3000);
+      try {
+        // Wait for network to settle
+        await this.page.waitForLoadState('networkidle', { timeout: 20000 });
+      } catch (error) {
+        console.log('⚠️ Network idle timeout, continuing with login verification...');
+      }
+      
+      // Wait a bit more for UI updates in WSL
+      await this.page.waitForTimeout(5000);
       
       const successIndicators = [
         'textarea[placeholder*="Send"]',
