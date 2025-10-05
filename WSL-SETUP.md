@@ -157,12 +157,17 @@ HEADLESS=true
 npx playwright test --debug
 ```
 
-2. **Test with minimal example:**
+2. **Test with standard timeouts:**
 ```bash
 npm run dev "Test WSL setup with a simple presentation"
 ```
 
-3. **Debug with screenshots:**
+3. **Test with enhanced timeouts for slow environments:**
+```bash
+npm run test-slow "Test slow environment with enhanced timeouts"
+```
+
+4. **Debug with screenshots:**
    - Check `debug-login-state.png` if login fails
    - Review console output for detailed logs
 

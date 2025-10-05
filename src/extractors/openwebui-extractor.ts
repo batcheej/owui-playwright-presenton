@@ -7,16 +7,22 @@ export class OpenWebUIExtractor {
     const openWebUIUrl = process.env.OPENWEBUI_URL || 'http://localhost:3000';
     
     // Navigate to Open WebUI
+    console.log(`🌐 Navigating to Open WebUI: ${openWebUIUrl}`);
     await this.page.goto(openWebUIUrl);
     
-    // Wait for the page to load
-    await this.page.waitForLoadState('networkidle');
+    // Enhanced waiting for Open WebUI to be fully loaded
+    console.log('⏳ Waiting for Open WebUI to fully load...');
+    await this.waitForOpenWebUIToLoad();
     
     // Check if login is required
     await this.handleLoginIfRequired();
     
+    // Wait for chat interface to be ready after potential login
+    console.log('⏳ Ensuring chat interface is ready...');
+    await this.waitForChatInterfaceReady();
+    
     // Find and fill the chat input
-    console.log('Looking for chat input field...');
+    console.log('🔍 Looking for chat input field...');
     const chatInputSelectors = [
       'textarea[placeholder*="Send a message"]', 
       'textarea[placeholder*="Ask"]', 
@@ -42,13 +48,23 @@ export class OpenWebUIExtractor {
       try {
         const elements = this.page.locator(selector);
         if (await elements.count() > 0) {
-          console.log(`Found chat input with selector: ${selector}`);
-          await this.page.waitForSelector(selector, { timeout: 5000 });
+          console.log(`✅ Found chat input with selector: ${selector}`);
+          
+          // Wait for the element to be fully ready and interactable
+          await this.page.waitForSelector(selector, { 
+            state: 'visible', 
+            timeout: 10000 
+          });
           
           const element = elements.first();
           
+          // Ensure element is enabled and ready for input
+          await element.waitFor({ state: 'visible', timeout: 5000 });
+          await this.page.waitForTimeout(1000); // Extra wait for stability
+          
           // Clear any existing text first
           await element.click();
+          await this.page.waitForTimeout(500);
           await element.fill('');
           await this.page.waitForTimeout(500);
           
@@ -58,7 +74,7 @@ export class OpenWebUIExtractor {
           
           // Step 2: Type the actual prompt after knowledge selection
           console.log('💬 Entering prompt after knowledge selection...');
-          await element.type(prompt);
+          await element.type(prompt, { delay: 50 }); // Add delay between keystrokes
           
           inputFound = true;
           usedSelector = selector;
@@ -66,7 +82,7 @@ export class OpenWebUIExtractor {
           break;
         }
       } catch (error) {
-        console.log(`Selector ${selector} failed:`, error);
+        console.log(`❌ Selector ${selector} failed:`, (error as Error).message);
         continue;
       }
     }
@@ -81,7 +97,9 @@ export class OpenWebUIExtractor {
     }
     
     // Send the message (look for send button or Enter key)
-    console.log('Sending the message...');
+    console.log('📤 Preparing to send message...');
+    await this.page.waitForTimeout(1000); // Wait for UI to be ready
+    
     const sendButtonSelectors = [
       'button[type="submit"]', 
       'button:has-text("Send")', 
@@ -99,24 +117,59 @@ export class OpenWebUIExtractor {
     for (const selector of sendButtonSelectors) {
       try {
         const buttons = this.page.locator(selector);
-        if (await buttons.count() > 0) {
-          console.log(`Found send button with selector: ${selector}`);
-          await buttons.first().click();
-          messageSent = true;
-          console.log('✅ Message sent via button click');
-          break;
+        const buttonCount = await buttons.count();
+        
+        if (buttonCount > 0) {
+          console.log(`🔍 Found ${buttonCount} send button(s) with selector: ${selector}`);
+          
+          const button = buttons.first();
+          
+          // Wait for button to be ready
+          await button.waitFor({ state: 'visible', timeout: 5000 });
+          
+          // Check if button is enabled
+          const isEnabled = await button.isEnabled();
+          if (isEnabled) {
+            console.log(`✅ Send button is enabled, clicking...`);
+            await button.click();
+            messageSent = true;
+            console.log('✅ Message sent via button click');
+            break;
+          } else {
+            console.log(`⚠️ Send button found but not enabled with selector: ${selector}`);
+          }
         }
       } catch (error) {
-        console.log(`Send button selector ${selector} failed:`, error);
+        console.log(`❌ Send button selector ${selector} failed:`, (error as Error).message);
         continue;
       }
     }
     
     if (!messageSent) {
       // If no send button found, try pressing Enter on the input field
-      console.log('No send button found, trying Enter key...');
-      await this.page.keyboard.press('Enter');
-      console.log('✅ Message sent via Enter key');
+      console.log('⌨️ No enabled send button found, trying Enter key on input field...');
+      
+      try {
+        // Focus back on the input field and press Enter
+        const inputSelector = usedSelector || 'textarea[placeholder*="Send"], textarea[placeholder*="message"]';
+        const inputElement = this.page.locator(inputSelector).first();
+        
+        await inputElement.click();
+        await this.page.waitForTimeout(500);
+        await this.page.keyboard.press('Enter');
+        
+        console.log('✅ Message sent via Enter key on input field');
+        messageSent = true;
+      } catch (error) {
+        console.log('⚠️ Enter key on input failed, trying page-level Enter...');
+        await this.page.keyboard.press('Enter');
+        console.log('✅ Message sent via page-level Enter key');
+      }
+    }
+    
+    if (messageSent) {
+      console.log('⏳ Waiting for message to be processed...');
+      await this.page.waitForTimeout(2000);
     }
     
     // Wait for the response to appear
@@ -887,6 +940,164 @@ export class OpenWebUIExtractor {
       // Clear the input if there was an error
       await inputElement.fill('');
       await this.page.waitForTimeout(500);
+    }
+  }
+
+  private async waitForOpenWebUIToLoad(): Promise<void> {
+    console.log('⏳ Waiting for Open WebUI to fully load...');
+    
+    const loadTimeout = parseInt(process.env.OPENWEBUI_LOAD_TIMEOUT || '30000');
+    console.log(`⏰ Using load timeout: ${loadTimeout}ms`);
+    
+    try {
+      // Wait for network to be idle first
+      await this.page.waitForLoadState('networkidle', { timeout: loadTimeout });
+      console.log('✅ Network idle state reached');
+      
+      // Wait for key elements that indicate Open WebUI is loaded
+      const loadingIndicators = [
+        // Chat interface elements
+        'textarea[placeholder*="Send"]',
+        'textarea[placeholder*="message"]',
+        'textarea.w-full',
+        
+        // Navigation elements
+        'nav',
+        '.sidebar',
+        
+        // Open WebUI specific elements
+        '.chat-input',
+        '.message-input',
+        
+        // Fallback: any textarea or main content area
+        'textarea',
+        'main',
+        '[data-testid*="chat"]'
+      ];
+      
+      let loaded = false;
+      const maxAttempts = 5;
+      let attempt = 0;
+      
+      while (!loaded && attempt < maxAttempts) {
+        attempt++;
+        console.log(`🔍 Loading check attempt ${attempt}/${maxAttempts}...`);
+        
+        for (const indicator of loadingIndicators) {
+          try {
+            const elements = await this.page.locator(indicator).count();
+            if (elements > 0) {
+              console.log(`✅ Found loading indicator: ${indicator}`);
+              loaded = true;
+              break;
+            }
+          } catch (error) {
+            // Continue checking other indicators
+          }
+        }
+        
+        if (!loaded) {
+          console.log('⏳ Open WebUI still loading, waiting 3 seconds...');
+          await this.page.waitForTimeout(3000);
+        }
+      }
+      
+      if (!loaded) {
+        console.log('⚠️ Open WebUI loading timeout, proceeding anyway...');
+      }
+      
+      // Additional wait to ensure JavaScript has fully initialized
+      console.log('⏳ Waiting for JavaScript initialization...');
+      await this.page.waitForTimeout(3000);
+      
+      // Check if the page has actually loaded by evaluating JavaScript
+      const pageReady = await this.page.evaluate(() => {
+        return document.readyState === 'complete' && 
+               window.location.href !== 'about:blank' &&
+               document.body && 
+               document.body.children.length > 0;
+      });
+      
+      if (pageReady) {
+        console.log('✅ Open WebUI page ready');
+      } else {
+        console.log('⚠️ Page may not be fully ready, continuing...');
+      }
+      
+    } catch (error) {
+      console.log('⚠️ Error waiting for Open WebUI to load:', (error as Error).message);
+      console.log('🔄 Continuing with reduced wait time...');
+      await this.page.waitForTimeout(5000);
+    }
+  }
+
+  private async waitForChatInterfaceReady(): Promise<void> {
+    console.log('⏳ Waiting for chat interface to be ready...');
+    
+    const chatTimeout = parseInt(process.env.CHAT_INTERFACE_TIMEOUT || '16000');
+    console.log(`⏰ Using chat interface timeout: ${chatTimeout}ms`);
+    
+    try {
+      // Wait for chat interface elements to be available and interactable
+      const chatReadyIndicators = [
+        'textarea[placeholder*="Send"]',
+        'textarea[placeholder*="message"]',
+        'textarea[placeholder*="Ask"]',
+        'textarea[placeholder*="Type"]',
+        'textarea.w-full',
+        'div[contenteditable="true"]',
+        '.chat-input textarea'
+      ];
+      
+      let interfaceReady = false;
+      const maxAttempts = 8;
+      let attempt = 0;
+      
+      while (!interfaceReady && attempt < maxAttempts) {
+        attempt++;
+        console.log(`🔍 Chat interface check ${attempt}/${maxAttempts}...`);
+        
+        for (const indicator of chatReadyIndicators) {
+          try {
+            const element = this.page.locator(indicator).first();
+            const count = await this.page.locator(indicator).count();
+            
+            if (count > 0) {
+              // Check if element is visible and enabled
+              const isVisible = await element.isVisible().catch(() => false);
+              const isEnabled = await element.isEnabled().catch(() => false);
+              
+              if (isVisible && isEnabled) {
+                console.log(`✅ Chat interface ready with selector: ${indicator}`);
+                interfaceReady = true;
+                break;
+              } else {
+                console.log(`⏳ Found ${indicator} but not ready (visible: ${isVisible}, enabled: ${isEnabled})`);
+              }
+            }
+          } catch (error) {
+            // Continue checking other indicators
+          }
+        }
+        
+        if (!interfaceReady) {
+          console.log('⏳ Chat interface not ready, waiting 2 seconds...');
+          await this.page.waitForTimeout(2000);
+        }
+      }
+      
+      if (!interfaceReady) {
+        console.log('⚠️ Chat interface ready timeout - proceeding with caution...');
+      }
+      
+      // Final stability wait
+      console.log('⏳ Final stability wait...');
+      await this.page.waitForTimeout(2000);
+      
+    } catch (error) {
+      console.log('⚠️ Error waiting for chat interface:', (error as Error).message);
+      console.log('🔄 Proceeding with fallback timeout...');
+      await this.page.waitForTimeout(5000);
     }
   }
 }

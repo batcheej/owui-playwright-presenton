@@ -10,7 +10,8 @@
     "test": "npx playwright test",
     "install-browsers": "npx playwright install",
     "check-env": "node check-env.js",
-    "setup": "npm install && npx playwright install && node check-env.js"
+    "setup": "npm install && npx playwright install && node check-env.js",
+    "test-slow": "node test-slow.js"
   },
   "keywords": [
     "playwright",
