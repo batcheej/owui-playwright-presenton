@@ -1,0 +1,1 @@
+This issue has been moved to the dedicated repository: https://github.com/batcheej/ppt-h5p-automation/issues/1
